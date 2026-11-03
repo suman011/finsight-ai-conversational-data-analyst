@@ -1,0 +1,12 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import { answerQuestion,questionSchema } from './engine.js';
+import { db } from './db.js';
+const app=express(); app.disable('x-powered-by'); app.use(helmet()); app.use(cors({origin:process.env.CLIENT_ORIGIN||'http://localhost:5173'})); app.use(express.json({limit:'16kb'}));
+app.get('/api/health',(_req,res)=>res.json({status:'ok'}));
+app.get('/api/overview',(_req,res)=>{const counts={customers:(db.prepare('SELECT COUNT(*) AS n FROM customers').get() as {n:number}).n,transactions:(db.prepare('SELECT COUNT(*) AS n FROM transactions').get() as {n:number}).n,applications:(db.prepare('SELECT COUNT(*) AS n FROM applications').get() as {n:number}).n,branches:(db.prepare('SELECT COUNT(*) AS n FROM branches').get() as {n:number}).n};res.json({data:counts});});
+app.post('/api/chat',(req,res)=>{const parsed=questionSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:{code:'INVALID_INPUT',message:'Enter a question between 3 and 500 characters.'}});return;}try{const result=answerQuestion(parsed.data.question);if(!result){res.status(422).json({error:{code:'UNSUPPORTED_QUESTION',message:'I can analyze customers, branches, applications, and transactions. Try one of the suggested questions.'}});return;}res.json({data:result});}catch(e){console.error('Query error',e);res.status(500).json({error:{code:'QUERY_FAILED',message:'Unable to complete the analysis. Please try again.'}});}});
+app.use((_req,res)=>res.status(404).json({error:{code:'NOT_FOUND',message:'Endpoint not found'}}));
+app.listen(Number(process.env.PORT||4000),()=>console.log('API listening on http://localhost:'+String(process.env.PORT||4000)));
